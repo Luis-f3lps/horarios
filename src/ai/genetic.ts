@@ -39,7 +39,8 @@ function mutarGrade(gradeOriginal: Grade): Grade {
   return novaGrade;
 }
 
-export async function rodarAlgoritmoGerador() {
+// Adicionei o parâmetro onProgress para enviar dados em tempo real para o navegador
+export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total: number, nota: number) => void) {
   console.log("🚀 Puxando dados do banco...");
   const professores = await prisma.professor.findMany();
   const disciplinas = await prisma.disciplina.findMany();
@@ -58,19 +59,22 @@ export async function rodarAlgoritmoGerador() {
   for (let geracao = 0; geracao < NUM_GERACOES; geracao++) {
     populacao.sort((a, b) => b.nota - a.nota);
 
+    // Envia o progresso para o servidor/frontend
+    if (onProgress && geracao % 20 === 0) {
+      onProgress(geracao, NUM_GERACOES, populacao[0].nota);
+    }
+
     const novaPopulacao = populacao.slice(0, 5);
 
     while (novaPopulacao.length < TAMANHO_POPULACAO) {
       const pai = populacao[randomInt(5)].grade; 
-      
       const filho = mutarGrade(pai); 
-      
       novaPopulacao.push({ grade: filho, nota: calcularFitness(filho, professores) });
     }
 
     populacao = novaPopulacao;
 
-    if (geracao % 50 === 0 || geracao === NUM_GERACOES - 1) {
+    if (geracao % 500 === 0 || geracao === NUM_GERACOES - 1) {
       console.log(`Geração ${geracao}: Melhor nota = ${populacao[0].nota}`);
     }
   }

@@ -86,6 +86,54 @@
         tbody.appendChild(tr);
       });
     }
+    function renderizarPorTurma(aulas) {
+    const turmasAgrupadas = aulas.reduce((acc, aula) => {
+      if (!acc[aula.turma]) acc[aula.turma] = [];
+      acc[aula.turma].push(aula);
+      return acc;
+    }, {});
+
+    const container = document.getElementById('corpo-tabela');
+    container.innerHTML = ''; 
+
+    for (const [nomeTurma, aulasDaTurma] of Object.entries(turmasAgrupadas)) {
+      container.innerHTML += `<h3>Turma: ${nomeTurma}</h3>`;
+
+      let tabelaHTML = `
+        <table style="margin-bottom: 30px;">
+          <thead>
+            <tr>
+              <th>Turno</th>
+              <th>Segunda</th>
+              <th>Terça</th>
+              <th>Quarta</th>
+              <th>Quinta</th>
+              <th>Sexta</th>
+            </tr>
+          </thead>
+          <tbody>`;
+
+      turnos.forEach(turno => {
+        tabelaHTML += `<tr><td><strong>${turno}</strong></td>`;
+        dias.forEach(dia => {
+          tabelaHTML += `<td>`;
+          const aulasNoSlot = aulasDaTurma.filter(a => a.dia === dia && a.turno === turno);
+          aulasNoSlot.forEach(aula => {
+            tabelaHTML += `
+              <div class="aula-card">
+                <div class="prof">${aula.professor}</div>
+                <div>${aula.disciplina}</div>
+              </div>`;
+          });
+          tabelaHTML += `</td>`;
+        });
+        tabelaHTML += `</tr>`;
+      });
+
+      tabelaHTML += `</tbody></table>`;
+      container.innerHTML += tabelaHTML;
+    }
+  }
   </script>
 </body>
 </html>
