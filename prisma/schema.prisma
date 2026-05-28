@@ -27,8 +27,7 @@ model Turma {
 model Disciplina {
   id    Int    @id @default(autoincrement())
   nome  String
-  setor String // 'tecnico' ou 'graduacao'
-  
+setor String @default("tecnico")  
   // Relacionamento com professor
   professorId Int
   professor   Professor @relation(fields: [professorId], references: [id])

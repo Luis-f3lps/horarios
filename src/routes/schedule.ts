@@ -7,10 +7,7 @@ const prisma = new PrismaClient();
 
 router.get('/schedule-stream', async (req, res) => {
   const setor = req.query.setor as 'tecnico' | 'graduacao';
-  
-  if (!setor) {
-    return res.status(400).write(`data: ${JSON.stringify({ type: 'error', message: 'Setor obrigatório' })}\n\n`);
-  }
+  if (!setor) return res.status(400).write(`data: ${JSON.stringify({ type: 'error', message: 'Setor obrigatório' })}\n\n`);
 
   res.setHeader('Content-Type', 'text/event-stream');
   res.setHeader('Cache-Control', 'no-cache');
@@ -32,18 +29,16 @@ router.get('/schedule-stream', async (req, res) => {
       turma: turmas.find(t => t.id === aula.turmaId)?.nome
     }));
 
-    res.write(`data: ${JSON.stringify({ type: 'done', nota: sugestoes[0].nota, aulas: melhorGradeTraduzida })}\n\n`);
-    res.end(); 
+    res.write(`data: ${JSON.stringify({ type: 'done', nota: sugestoes[0].nota })}\n\n`);
+    res.end();
   } catch (error) {
-    console.error(error);
-    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Erro no processador da IA' })}\n\n`);
+    res.write(`data: ${JSON.stringify({ type: 'error' })}\n\n`);
     res.end();
   }
 });
 
 router.post('/save-schedule', async (req, res) => {
-  const { aulas, setor } = req.body; 
-
+  const { aulas, setor } = req.body;
   try {
     await prisma.aulaSalva.createMany({
       data: aulas.map((a: any) => ({
@@ -57,8 +52,7 @@ router.post('/save-schedule', async (req, res) => {
     });
     res.json({ success: true });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ error: "Erro ao salvar grade no banco de dados" });
+    res.status(500).json({ error: "Erro ao salvar" });
   }
 });
 

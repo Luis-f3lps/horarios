@@ -12,7 +12,10 @@ app.get('/', (req, res) => {
 });
 
 app.use('/api', scheduleRoutes);
-
+app.use((req, res, next) => {
+  console.log(`🔍 [LOG DE REDE]: Recebi uma requisição ${req.method} para ${req.url}`);
+  next();
+});
 app.listen(3000, () => {
   console.log('Servidor rodando na porta 3000 🚀');
   console.log('Acesse: http://localhost:3000 para ver o Sistema Merlin!');
