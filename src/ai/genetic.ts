@@ -1,5 +1,6 @@
 import { PrismaClient } from '@prisma/client';
 import { calcularFitness, Grade, Aula } from './fitness';
+import { mutarGrade } from './mutations';
 
 const prisma = new PrismaClient();
 
@@ -24,25 +25,15 @@ function gerarGradeAleatoria(disciplinas: any[]): Grade {
   return { aulas };
 }
 
-function mutarGrade(gradeOriginal: Grade): Grade {
-  const novaGrade = JSON.parse(JSON.stringify(gradeOriginal)) as Grade;
-  const qtdMutacoes = randomInt(5) + 1;
-  
-  for (let i = 0; i < qtdMutacoes; i++) {
-    const indiceAleatorio = randomInt(novaGrade.aulas.length);
-    novaGrade.aulas[indiceAleatorio].dia = DIAS[randomInt(DIAS.length)];
-    novaGrade.aulas[indiceAleatorio].turno = TURNOS[randomInt(TURNOS.length)];
-  }
-
-  return novaGrade;
-}
-
 export async function rodarAlgoritmoGerador(
+  setor: 'tecnico' | 'graduacao', 
   onProgress?: (geracao: number, total: number, melhorNota: number) => void
 ) {
-  console.log("🚀 Puxando dados do banco...");
+  console.log(`🚀 Buscando dados do setor: ${setor}...`);
+  const disciplinas = await prisma.disciplina.findMany({ where: { setor } });
   const professores = await prisma.professor.findMany();
-  const disciplinas = await prisma.disciplina.findMany();
+  const turmas = await prisma.turma.findMany();
+  const aulasCongeladas = await prisma.aulaSalva.findMany(); // Já busca o que está travado
 
   const TAMANHO_POPULACAO = 200;
   const NUM_GERACOES = 5000;
@@ -50,7 +41,8 @@ export async function rodarAlgoritmoGerador(
 
   for (let i = 0; i < TAMANHO_POPULACAO; i++) {
     const grade = gerarGradeAleatoria(disciplinas);
-    populacao.push({ grade, nota: calcularFitness(grade, professores) });
+    // Passando o aulasCongeladas para o cálculo de fitness
+    populacao.push({ grade, nota: calcularFitness(grade, professores, turmas, disciplinas, aulasCongeladas) });
   }
 
   console.log("🧬 Iniciando a Evolução Genética...");
@@ -68,7 +60,8 @@ export async function rodarAlgoritmoGerador(
     while (novaPopulacao.length < TAMANHO_POPULACAO) {
       const pai = populacao[randomInt(5)].grade; 
       const filho = mutarGrade(pai); 
-      novaPopulacao.push({ grade: filho, nota: calcularFitness(filho, professores) });
+      // Passando o aulasCongeladas aqui também
+      novaPopulacao.push({ grade: filho, nota: calcularFitness(filho, professores, turmas, disciplinas, aulasCongeladas) });
     }
 
     populacao = novaPopulacao;
