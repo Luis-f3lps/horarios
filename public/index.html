@@ -35,42 +35,64 @@
       </tr>
     </thead>
     <tbody id="corpo-tabela">
-      </tbody>
+    </tbody>
   </table>
 
   <script>
     const turnos = ['M1', 'M2', 'T1', 'T2'];
     const dias = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
 
-    async function gerarHorarios() {
-      document.getElementById('status').innerText = 'O processador Xeon está pensando... (Aguarde alguns segundos)';
-      document.getElementById('corpo-tabela').innerHTML = ''; 
+    function gerarHorarios() {
+      const statusText = document.getElementById('status');
+      const tbody = document.getElementById('corpo-tabela');
+      const botao = document.querySelector('.btn-gerar');
+      
+      statusText.innerText = 'Iniciando o motor genético...';
+      tbody.innerHTML = '';
+      botao.disabled = true;
+      botao.style.backgroundColor = '#95a5a6';
 
-      try {
-        const resposta = await fetch('/api/schedule', { method: 'POST' });
-        const json = await resposta.json();
-        
-        document.getElementById('status').innerText = `✅ Horário gerado com sucesso! (Nota da IA: ${json.nota})`;
-        renderizarTabela(json.aulas);
-      } catch (erro) {
-        document.getElementById('status').innerText = '❌ Erro ao conectar com o servidor.';
-      }
+      const source = new EventSource('/api/schedule-stream');
+
+      source.onmessage = function(event) {
+        const dados = JSON.parse(event.data);
+
+        if (dados.type === 'progress') {
+          const porcentagem = Math.floor((dados.geracao / dados.total) * 100);
+          statusText.innerHTML = `⏳ Evoluindo as grades... <b>${porcentagem}%</b> (Geração ${dados.geracao} de ${dados.total}) <br> Melhor nota encontrada: <span style="color:red">${dados.nota}</span>`;
+        } 
+        else if (dados.type === 'done') {
+          statusText.innerHTML = `✅ Horário gerado com sucesso! (Nota final da IA: <span style="color:green">${dados.nota}</span>)`;
+          renderizarTabela(dados.aulas);
+          
+          botao.disabled = false;
+          botao.style.backgroundColor = '#27ae60';
+          source.close();
+        }
+        else if (dados.type === 'error') {
+          statusText.innerHTML = '❌ Erro no servidor.';
+          source.close();
+        }
+      };
+
+      source.onerror = function() {
+        statusText.innerHTML = '❌ Conexão perdida com o servidor.';
+        source.close();
+        botao.disabled = false;
+        botao.style.backgroundColor = '#27ae60';
+      };
     }
 
     function renderizarTabela(aulas) {
       const tbody = document.getElementById('corpo-tabela');
-
       turnos.forEach(turno => {
         const tr = document.createElement('tr');
         const tdTurno = document.createElement('td');
         tdTurno.innerHTML = `<strong>${turno}</strong>`;
         tr.appendChild(tdTurno);
-
         dias.forEach(dia => {
           const td = document.createElement('td');
-          
           const aulasNoSlot = aulas.filter(a => a.dia === dia && a.turno === turno);
-          
           aulasNoSlot.forEach(aula => {
             td.innerHTML += `
               <div class="aula-card">
@@ -80,7 +102,6 @@
               </div>
             `;
           });
-          
           tr.appendChild(td);
         });
         tbody.appendChild(tr);
