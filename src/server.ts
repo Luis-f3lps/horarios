@@ -39,7 +39,10 @@ app.post('/api/schedule', async (req, res) => {
     res.status(500).json({ error: "Erro ao gerar horários" });
   }
 });
-
+// Adicione este bloco no seu src/server.ts:
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
 app.listen(3000, () => {
   console.log('Servidor rodando na porta 3000 🚀');
   console.log('Acesse: http://localhost:3000 para ver o Sistema Merlin!');
