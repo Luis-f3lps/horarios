@@ -1,4 +1,3 @@
-// src/server.ts
 import express from 'express';
 import path from 'path';
 import { PrismaClient } from '@prisma/client';
@@ -8,13 +7,23 @@ const app = express();
 const prisma = new PrismaClient();
 
 app.use(express.json());
-
 app.use(express.static(path.join(__dirname, '../public')));
 
-app.post('/api/schedule', async (req, res) => {
+app.get('/', (req, res) => {
+  res.sendFile(path.join(__dirname, '../public/index.html'));
+});
+
+app.get('/api/schedule-stream', async (req, res) => {
+  res.setHeader('Content-Type', 'text/event-stream');
+  res.setHeader('Cache-Control', 'no-cache');
+  res.setHeader('Connection', 'keep-alive');
+
   try {
-    console.log("Recebendo pedido de geração...");
-    const sugestoes = await rodarAlgoritmoGerador();
+    console.log("Recebendo pedido de geração em tempo real...");
+    
+    const sugestoes = await rodarAlgoritmoGerador((geracao, total, nota) => {
+      res.write(`data: ${JSON.stringify({ type: 'progress', geracao, total, nota })}\n\n`);
+    });
     
     const professores = await prisma.professor.findMany();
     const turmas = await prisma.turma.findMany();
@@ -28,22 +37,18 @@ app.post('/api/schedule', async (req, res) => {
       turma: turmas.find(t => t.id === aula.turmaId)?.nome || 'Desconhecida'
     }));
 
-    res.json({ 
-      success: true, 
-      nota: sugestoes[0].nota, 
-      aulas: melhorGradeTraduzida 
-    });
+    res.write(`data: ${JSON.stringify({ type: 'done', nota: sugestoes[0].nota, aulas: melhorGradeTraduzida })}\n\n`);
+    res.end(); 
 
   } catch (error) {
     console.error(error);
-    res.status(500).json({ error: "Erro ao gerar horários" });
+    res.write(`data: ${JSON.stringify({ type: 'error', message: 'Erro interno no processador da IA' })}\n\n`);
+    res.end();
   }
 });
-// Adicione este bloco no seu src/server.ts:
-app.get('/', (req, res) => {
-  res.sendFile(path.join(__dirname, '../public/index.html'));
-});
+
 app.listen(3000, () => {
   console.log('Servidor rodando na porta 3000 🚀');
   console.log('Acesse: http://localhost:3000 para ver o Sistema Merlin!');
 });
+
