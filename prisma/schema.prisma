@@ -14,44 +14,33 @@ datasource db {
 model Professor {
   id              Int          @id @default(autoincrement())
   nome            String
-  diasDisponiveis Json         // Formato: {"segunda": ["M1", "M2"], "terca": []}
+  // JSON para Restrições Tipo 2: {"segunda": ["M1", "M2"], "sexta": []}
+  diasDisponiveis Json         
   disciplinas     Disciplina[]
 }
 
 model Turma {
   id          Int          @id @default(autoincrement())
-  nome        String       @unique
+  nome        String       // Ex: "3º Ano Informática"
   disciplinas Disciplina[]
 }
 
 model Disciplina {
-  id    Int    @id @default(autoincrement())
-  nome  String
-setor String @default("tecnico")  
-  // Relacionamento com professor
-  professorId Int
-  professor   Professor @relation(fields: [professorId], references: [id])
+  id           Int       @id @default(autoincrement())
+  nome         String    // Ex: "Lógica de Programação"
+  cargaHoraria Int       // Ex: 4 (4 aulas por semana)
   
-  // Relacionamento com turmas (Muitos para Muitos)
-  turmas      Turma[]
-  
-  // Campo auxiliar para a regra de "Turma Inexistente"
-  turmasPermitidas Int[] // IDs das turmas que podem cursar esta disciplina
-}
-
-model AulaSalva {
-  id           Int    @id @default(autoincrement())
+  // Relações: Quem dá a disciplina e para qual turma
   professorId  Int
+  professor    Professor @relation(fields: [professorId], references: [id])
+  
   turmaId      Int
-  disciplinaId Int
-  dia          String
-  turno        String
-  setor        String
+  turma        Turma     @relation(fields: [turmaId], references: [id])
 }
 
 model RegraPedagogica {
   id         Int    @id @default(autoincrement())
-  nome       String
-  valorMax   Int
-  penalidade Int
+  nome       String // Ex: "Evitar janelas" ou "Máximo 2 aulas seguidas"
+  valorMax   Int    // Limite numérico da regra
+  penalidade Int    // Quantos pontos a grade perde se quebrar essa regra (Restrição Tipo 3)
 }
