@@ -10,11 +10,11 @@ router.post('/schedule', async (req, res) => {
   try {
     console.log("1. Recebendo pedido de geração...");
     
-    // Testa se o algoritmo retorna algo
-    const sugestoes = await rodarAlgoritmoGerador();
-    console.log("2. Algoritmo executou. Quantidade de resultados:", sugestoes ? sugestoes.length : "NULO");
+    // Agora ele retorna { grade, nota, logs } direto do campeão
+    const resultado = await rodarAlgoritmoGerador();
+    console.log("2. Algoritmo executou com sucesso!");
 
-    if (!sugestoes || sugestoes.length === 0) {
+    if (!resultado || !resultado.grade) {
       return res.status(500).json({ error: "O algoritmo não retornou nenhuma grade." });
     }
 
@@ -24,22 +24,24 @@ router.post('/schedule', async (req, res) => {
     const disciplinas = await prisma.disciplina.findMany();
     console.log("4. Dados carregados. Mapeando grade...");
 
-    const melhorGradeTraduzida = sugestoes[0].grade.aulas.map(aula => ({
+    // Traduz os IDs para os Nomes legíveis usando a grade do resultado
+    const melhorGradeTraduzida = resultado.grade.aulas.map((aula: any) => ({
       dia: aula.dia,
       turno: aula.turno,
-      disciplina: disciplinas.find(d => d.id === aula.disciplinaId)?.nome || 'Desconhecida',
-      professor: professores.find(p => p.id === aula.professorId)?.nome || 'Desconhecido',
-      turma: turmas.find(t => t.id === aula.turmaId)?.nome || 'Desconhecida'
+      disciplina: disciplinas.find((d: any) => d.id === aula.disciplinaId)?.nome || 'Desconhecida',
+      professor: professores.find((p: any) => p.id === aula.professorId)?.nome || 'Desconhecido',
+      turma: turmas.find((t: any) => t.id === aula.turmaId)?.nome || 'Desconhecida'
     }));
 
+    // Envia tudo para o Frontend (incluindo os logs!)
     res.json({ 
       success: true, 
-      nota: sugestoes[0].nota, 
-      aulas: melhorGradeTraduzida 
+      nota: resultado.nota, 
+      aulas: melhorGradeTraduzida,
+      logs: resultado.logs 
     });
 
   } catch (error) {
-    // ESTA É A LINHA QUE VAI REVELAR O ERRO
     console.error("!!! ERRO CRÍTICO NO BACKEND !!!", error);
     res.status(500).json({ error: "Erro no servidor. Verifique o terminal." });
   }

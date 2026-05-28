@@ -6,134 +6,140 @@
   <style>
     body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; padding: 20px; }
     h1 { color: #2c3e50; text-align: center; }
-    .btn-gerar { display: block; margin: 0 auto 20px; padding: 15px 30px; background-color: #27ae60; color: white; border: none; border-radius: 5px; font-size: 18px; cursor: pointer; transition: 0.3s; }
-    .btn-gerar:hover { background-color: #219150; }
-    #status { text-align: center; font-weight: bold; margin-bottom: 20px; color: #e67e22; }
-    table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    .controls { text-align: center; margin-bottom: 20px; }
+    .btn-gerar { padding: 15px 30px; background-color: #27ae60; color: white; border: none; border-radius: 5px; font-size: 18px; cursor: pointer; }
+    select { padding: 10px; font-size: 16px; border-radius: 5px; }
+    table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
     th, td { border: 1px solid #ddd; padding: 12px; text-align: center; width: 16%; }
     th { background-color: #2980b9; color: white; }
     .aula-card { background-color: #ecf0f1; margin: 5px; padding: 8px; border-radius: 4px; font-size: 12px; border-left: 4px solid #3498db; text-align: left; }
     .prof { font-weight: bold; color: #2c3e50; }
-    .turma { color: #c0392b; font-size: 11px; font-weight: bold;}
+    
+    #relatorio-erros {
+      background: #fff3cd;
+      color: #856404;
+      padding: 15px;
+      border-radius: 5px;
+      border-left: 5px solid #ffeeba;
+      margin-bottom: 20px;
+      font-size: 13px;
+      display: none; /* Escondido por padrão */
+    }
+    #relatorio-erros ul { margin: 0; padding-left: 20px; margin-top: 10px; }
   </style>
 </head>
 <body>
 
   <h1>🧙‍♂️ Sistema Merlin - Gerador Genético</h1>
-  <button class="btn-gerar" onclick="gerarHorarios()">Gerar Melhor Horário Mágico</button>
-  <div id="status">Aguardando comando...</div>
+  
+  <div class="controls">
+    <button class="btn-gerar" onclick="gerarHorarios()">Gerar Melhor Horário Mágico</button>
+    <br><br>
+    <label>Filtrar por Turma:</label>
+    <select id="filtroTurma" onchange="renderizarPorTurma()">
+      <option value="">Todas as Turmas</option>
+    </select>
+  </div>
 
-  <table id="tabela-horarios">
-    <thead>
-      <tr>
-        <th>Turno</th>
-        <th>Segunda</th>
-        <th>Terça</th>
-        <th>Quarta</th>
-        <th>Quinta</th>
-        <th>Sexta</th>
-      </tr>
-    </thead>
-    <tbody id="corpo-tabela">
-      </tbody>
-  </table>
+  <div id="status">Aguardando comando...</div>
+  
+  <div id="relatorio-erros">
+    <strong>📋 Relatório de Penalidades do Horário:</strong>
+    <ul id="lista-logs"></ul>
+  </div>
+
+  <div id="container-tabela"></div>
 
   <script>
-    const turnos = ['M1', 'M2', 'T1', 'T2'];
+    let dadosGlobais = []; 
+const turnos = ['M1', 'M2', 'M3', 'M4', 'T1', 'T2', 'T3', 'T4', 'N1', 'N2', 'N3', 'N4'];
     const dias = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
 
     async function gerarHorarios() {
-      document.getElementById('status').innerText = 'O processador Xeon está pensando... (Aguarde alguns segundos)';
-      document.getElementById('corpo-tabela').innerHTML = ''; 
-
+      document.getElementById('status').innerText = 'O processador Xeon está pensando... (Aguarde)';
+      
       try {
         const resposta = await fetch('/api/schedule', { method: 'POST' });
         const json = await resposta.json();
         
-        document.getElementById('status').innerText = `✅ Horário gerado com sucesso! (Nota da IA: ${json.nota})`;
-        renderizarTabela(json.aulas);
+        dadosGlobais = json.aulas; 
+        document.getElementById('status').innerText = `✅ Horário gerado! (Nota: ${json.nota})`;
+        
+        // --- LÓGICA DO RELATÓRIO DE ERROS ---
+        const caixaRelatorio = document.getElementById('relatorio-erros');
+        const listaLogs = document.getElementById('lista-logs');
+        listaLogs.innerHTML = ''; // Limpa logs antigos
+        
+        if (json.logs && json.logs.length > 0) {
+          caixaRelatorio.style.display = 'block';
+          // Mostra até 20 erros para não travar a tela
+          json.logs.slice(0, 20).forEach(log => {
+            listaLogs.innerHTML += `<li>${log}</li>`;
+          });
+          if (json.logs.length > 20) {
+            listaLogs.innerHTML += `<li><em>...e mais ${json.logs.length - 20} problemas menores detalhados no sistema.</em></li>`;
+          }
+        } else {
+          caixaRelatorio.style.display = 'none'; // Esconde se não houver erros
+        }
+        // ------------------------------------
+
+        popularDropdown();
+        renderizarPorTurma(); 
       } catch (erro) {
+        console.error(erro);
         document.getElementById('status').innerText = '❌ Erro ao conectar com o servidor.';
       }
     }
 
-    function renderizarTabela(aulas) {
-      const tbody = document.getElementById('corpo-tabela');
+    function popularDropdown() {
+      const select = document.getElementById('filtroTurma');
+      select.innerHTML = '<option value="">Todas as Turmas</option>';
+      
+      if (!dadosGlobais) return;
 
-      turnos.forEach(turno => {
-        const tr = document.createElement('tr');
-        const tdTurno = document.createElement('td');
-        tdTurno.innerHTML = `<strong>${turno}</strong>`;
-        tr.appendChild(tdTurno);
-
-        dias.forEach(dia => {
-          const td = document.createElement('td');
-          
-          const aulasNoSlot = aulas.filter(a => a.dia === dia && a.turno === turno);
-          
-          aulasNoSlot.forEach(aula => {
-            td.innerHTML += `
-              <div class="aula-card">
-                <div class="prof">${aula.professor}</div>
-                <div>${aula.disciplina}</div>
-                <div class="turma">${aula.turma}</div>
-              </div>
-            `;
-          });
-          
-          tr.appendChild(td);
-        });
-        tbody.appendChild(tr);
+      const turmasUnicas = [...new Set(dadosGlobais.map(a => a.turma))].sort();
+      
+      turmasUnicas.forEach(turma => {
+        const option = document.createElement('option');
+        option.value = turma;
+        option.text = turma;
+        select.appendChild(option);
       });
     }
-    function renderizarPorTurma(aulas) {
-    const turmasAgrupadas = aulas.reduce((acc, aula) => {
-      if (!acc[aula.turma]) acc[aula.turma] = [];
-      acc[aula.turma].push(aula);
-      return acc;
-    }, {});
 
-    const container = document.getElementById('corpo-tabela');
-    container.innerHTML = ''; 
+    function renderizarPorTurma() {
+      const filtro = document.getElementById('filtroTurma').value;
+      const container = document.getElementById('container-tabela');
+      container.innerHTML = '';
 
-    for (const [nomeTurma, aulasDaTurma] of Object.entries(turmasAgrupadas)) {
-      container.innerHTML += `<h3>Turma: ${nomeTurma}</h3>`;
+      if (!dadosGlobais) return;
 
-      let tabelaHTML = `
-        <table style="margin-bottom: 30px;">
-          <thead>
-            <tr>
-              <th>Turno</th>
-              <th>Segunda</th>
-              <th>Terça</th>
-              <th>Quarta</th>
-              <th>Quinta</th>
-              <th>Sexta</th>
-            </tr>
-          </thead>
-          <tbody>`;
+      let aulasFiltradas = filtro ? dadosGlobais.filter(a => a.turma === filtro) : dadosGlobais;
+      
+      const grupos = aulasFiltradas.reduce((acc, aula) => {
+        if (!acc[aula.turma]) acc[aula.turma] = [];
+        acc[aula.turma].push(aula);
+        return acc;
+      }, {});
 
-      turnos.forEach(turno => {
-        tabelaHTML += `<tr><td><strong>${turno}</strong></td>`;
-        dias.forEach(dia => {
-          tabelaHTML += `<td>`;
-          const aulasNoSlot = aulasDaTurma.filter(a => a.dia === dia && a.turno === turno);
-          aulasNoSlot.forEach(aula => {
-            tabelaHTML += `
-              <div class="aula-card">
-                <div class="prof">${aula.professor}</div>
-                <div>${aula.disciplina}</div>
-              </div>`;
+      for (const [nomeTurma, aulas] of Object.entries(grupos)) {
+        container.innerHTML += `<h3>Turma: ${nomeTurma}</h3>`;
+        let html = `<table><thead><tr><th>Turno</th><th>Segunda</th><th>Terça</th><th>Quarta</th><th>Quinta</th><th>Sexta</th></tr></thead><tbody>`;
+        
+        turnos.forEach(turno => {
+          html += `<tr><td><strong>${turno}</strong></td>`;
+          dias.forEach(dia => {
+            html += `<td>` + aulas.filter(a => a.dia === dia && a.turno === turno)
+              .map(a => `<div class="aula-card"><div class="prof">${a.professor}</div><div>${a.disciplina}</div></div>`)
+              .join('') + `</td>`;
           });
-          tabelaHTML += `</td>`;
+          html += `</tr>`;
         });
-        tabelaHTML += `</tr>`;
-      });
-
-      tabelaHTML += `</tbody></table>`;
-      container.innerHTML += tabelaHTML;
+        html += `</tbody></table>`;
+        container.innerHTML += html;
+      }
     }
-  }
   </script>
 </body>
 </html>
