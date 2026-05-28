@@ -1,0 +1,46 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ==========================================
+// TABELAS DO SISTEMA DE HORÁRIOS - IFNMG
+// ==========================================
+
+model Professor {
+  id              Int          @id @default(autoincrement())
+  nome            String
+  // JSON para Restrições Tipo 2: {"segunda": ["M1", "M2"], "sexta": []}
+  diasDisponiveis Json         
+  disciplinas     Disciplina[]
+}
+
+model Turma {
+  id          Int          @id @default(autoincrement())
+  nome        String       // Ex: "3º Ano Informática"
+  disciplinas Disciplina[]
+}
+
+model Disciplina {
+  id           Int       @id @default(autoincrement())
+  nome         String    // Ex: "Lógica de Programação"
+  cargaHoraria Int       // Ex: 4 (4 aulas por semana)
+  
+  // Relações: Quem dá a disciplina e para qual turma
+  professorId  Int
+  professor    Professor @relation(fields: [professorId], references: [id])
+  
+  turmaId      Int
+  turma        Turma     @relation(fields: [turmaId], references: [id])
+}
+
+model RegraPedagogica {
+  id         Int    @id @default(autoincrement())
+  nome       String // Ex: "Evitar janelas" ou "Máximo 2 aulas seguidas"
+  valorMax   Int    // Limite numérico da regra
+  penalidade Int    // Quantos pontos a grade perde se quebrar essa regra (Restrição Tipo 3)
+}

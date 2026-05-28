@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <title>Sistema Merlin - IFNMG</title>
+  <style>
+    body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; background-color: #f4f7f6; padding: 20px; }
+    h1 { color: #2c3e50; text-align: center; }
+    .btn-gerar { display: block; margin: 0 auto 20px; padding: 15px 30px; background-color: #27ae60; color: white; border: none; border-radius: 5px; font-size: 18px; cursor: pointer; transition: 0.3s; }
+    .btn-gerar:hover { background-color: #219150; }
+    #status { text-align: center; font-weight: bold; margin-bottom: 20px; color: #e67e22; }
+    table { width: 100%; border-collapse: collapse; background: white; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
+    th, td { border: 1px solid #ddd; padding: 12px; text-align: center; width: 16%; }
+    th { background-color: #2980b9; color: white; }
+    .aula-card { background-color: #ecf0f1; margin: 5px; padding: 8px; border-radius: 4px; font-size: 12px; border-left: 4px solid #3498db; text-align: left; }
+    .prof { font-weight: bold; color: #2c3e50; }
+    .turma { color: #c0392b; font-size: 11px; font-weight: bold;}
+  </style>
+</head>
+<body>
+
+  <h1>🧙‍♂️ Sistema Merlin - Gerador Genético</h1>
+  <button class="btn-gerar" onclick="gerarHorarios()">Gerar Melhor Horário Mágico</button>
+  <div id="status">Aguardando comando...</div>
+
+  <table id="tabela-horarios">
+    <thead>
+      <tr>
+        <th>Turno</th>
+        <th>Segunda</th>
+        <th>Terça</th>
+        <th>Quarta</th>
+        <th>Quinta</th>
+        <th>Sexta</th>
+      </tr>
+    </thead>
+    <tbody id="corpo-tabela">
+      </tbody>
+  </table>
+
+  <script>
+    const turnos = ['M1', 'M2', 'T1', 'T2'];
+    const dias = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+
+    async function gerarHorarios() {
+      document.getElementById('status').innerText = 'O processador Xeon está pensando... (Aguarde alguns segundos)';
+      document.getElementById('corpo-tabela').innerHTML = ''; 
+
+      try {
+        const resposta = await fetch('/api/schedule', { method: 'POST' });
+        const json = await resposta.json();
+        
+        document.getElementById('status').innerText = `✅ Horário gerado com sucesso! (Nota da IA: ${json.nota})`;
+        renderizarTabela(json.aulas);
+      } catch (erro) {
+        document.getElementById('status').innerText = '❌ Erro ao conectar com o servidor.';
+      }
+    }
+
+    function renderizarTabela(aulas) {
+      const tbody = document.getElementById('corpo-tabela');
+
+      turnos.forEach(turno => {
+        const tr = document.createElement('tr');
+        const tdTurno = document.createElement('td');
+        tdTurno.innerHTML = `<strong>${turno}</strong>`;
+        tr.appendChild(tdTurno);
+
+        dias.forEach(dia => {
+          const td = document.createElement('td');
+          
+          const aulasNoSlot = aulas.filter(a => a.dia === dia && a.turno === turno);
+          
+          aulasNoSlot.forEach(aula => {
+            td.innerHTML += `
+              <div class="aula-card">
+                <div class="prof">${aula.professor}</div>
+                <div>${aula.disciplina}</div>
+                <div class="turma">${aula.turma}</div>
+              </div>
+            `;
+          });
+          
+          tr.appendChild(td);
+        });
+        tbody.appendChild(tr);
+      });
+    }
+  </script>
+</body>
+</html>
