@@ -2,11 +2,8 @@ import { PrismaClient } from '@prisma/client';
 
 const prisma = new PrismaClient();
 
-// SEU JSON DE DADOS
-const dadosDisciplinas: Record<string, { professor: string, turma: string }[]> = {
-
-
-  "Agricultura Geral e Olericultura": [
+// 1. Cole o seu objeto JSON completo aqui
+const seedData = {"Agricultura Geral e Olericultura": [
     {
       "professor": "Cani",
       "turma": "1º ANO A\nAgropecuária"
@@ -2455,149 +2452,69 @@ const dadosDisciplinas: Record<string, { professor: string, turma: string }[]> =
       "professor": "Marco Aurélio",
       "turma": "3º PERÍODO\nLic. Matemática"
     }
-  ]
-};
+  ]}
 
-async function main() {
-  console.log("⏳ Iniciando o cadastro Inteligente de Disciplinas...");
+async function verificarFaltantes() {
+  console.log("🔍 Mapeando os dados do Seed...");
   
-  console.log("🧹 Limpando disciplinas antigas...");
-  await prisma.disciplina.deleteMany({});
-  
-  // ====================================================================
-  console.log("🩺 Verificando cadastros pendentes de Professores e Turmas...");
+  // 2. Transforma o seu JSON em uma lista plana mais fácil de checar
+  const listaEsperada = [];
+  for (const [nomeDisciplina, alocacoes] of Object.entries(seedData)) {
+    for (const alocacao of (alocacoes as any[])) {
+      listaEsperada.push({
+        disciplina: nomeDisciplina.trim(),
+        professor: alocacao.professor.trim(),
+        // Troca o \n por espaço normal para evitar falsos positivos
+        turma: alocacao.turma.replace('\n', ' ').trim() 
+      });
+    }
+  }
 
-  // 1. Cria o Professor CEaD se não existir
-  const profCead = await prisma.professor.findFirst({ where: { nome: 'CEaD' } });
-  if (!profCead) {
-    const todosOsTurnos = ['M1', 'M2', 'M3', 'M4', 'T1', 'T2', 'T3', 'T4', 'N1', 'N2', 'N3', 'N4'];
+  console.log(`📊 Total esperado do Seed: ${listaEsperada.length} aulas cadastradas`);
+
+  // 3. Puxa o banco de dados inteiro (trazendo os nomes do prof e turma juntos)
+  const disciplinasNoBanco = await prisma.disciplina.findMany({
+    include: {
+      professor: true,
+      turma: true
+    }
+  });
+
+  // 4. Cria um "registro digital" de cada disciplina do banco para busca rápida
+  // Tudo em minúsculo e sem espaços extras para a comparação ser à prova de falhas
+  const bancoNormalizado = new Set(
+    disciplinasNoBanco.map(d => {
+      const profNome = d.professor?.nome || '';
+      const turmaNome = d.turma?.nome || '';
+      return `${d.nome}-${profNome}-${turmaNome}`.toLowerCase().replace(/\s+/g, ' ');
+    })
+  );
+
+  console.log(`📊 Total salvo no Banco: ${disciplinasNoBanco.length} aulas cadastradas\n`);
+
+  // 5. O Grande Filtro: quem está na lista esperada mas não está no banco?
+  const faltantes = [];
+
+  for (const item of listaEsperada) {
+    const chaveEsperada = `${item.disciplina}-${item.professor}-${item.turma}`.toLowerCase().replace(/\s+/g, ' ');
     
-    await prisma.professor.create({ 
-      data: { 
-        nome: 'CEaD',
-        diasDisponiveis: {
-          "segunda": todosOsTurnos,
-          "terca": todosOsTurnos,
-          "quarta": todosOsTurnos,
-          "quinta": todosOsTurnos,
-          "sexta": todosOsTurnos
-        }
-      } 
-    });
-    console.log("   ➕ Professor 'CEaD' cadastrado no banco com disponibilidade total.");
-  }
-
-  // 2. Cria as turmas de 9º e 10º Período se não existirem
-  const turmasPendentes = [
-    "9º PERÍODO Eng. Florestal", "10º PERÍODO Eng. Florestal",
-    "9º PERÍODO Med. Veterinária", "10º PERÍODO Med. Veterinária",
-    "9º PERÍODO Eng. Alimentos", "10º PERÍODO Eng. Alimentos"
-  ];
-
-  for (const nomeTurma of turmasPendentes) {
-    const turmaExiste = await prisma.turma.findFirst({ where: { nome: nomeTurma } });
-    if (!turmaExiste) {
-      await prisma.turma.create({ data: { nome: nomeTurma } });
-      console.log(`   ➕ Turma '${nomeTurma}' cadastrada no banco.`);
-    }
-  }
-  // ====================================================================
-
-  console.log("🔍 Iniciando os vínculos das disciplinas...");
-  const professoresDb = await prisma.professor.findMany();
-  const turmasDb = await prisma.turma.findMany();
-  
-  // Como as turmas e profs foram atualizados, precisamos garantir que o mapa tem tudo
-  const mapaProfessores = new Map(professoresDb.map(p => [p.nome.trim().toLowerCase(), p.id]));
-  
-  const disciplinasParaInserir: any[] = [];
-  const logErros: string[] = [];
-
-  for (const [nomeDisciplina, alocacoes] of Object.entries(dadosDisciplinas)) {
-    for (const alocacao of alocacoes) {
-      const nomeProf = alocacao.professor.trim().toLowerCase();
-      const professorId = mapaProfessores.get(nomeProf);
-
-      let turmaId = null;
-
-      const textoJson = alocacao.turma.toLowerCase()
-        .normalize("NFD").replace(/[\u0300-\u036f]/g, "")
-        .replace(/\n/g, ' ');
-
-      for (const turmaDb of turmasDb) {
-        const textoDb = turmaDb.nome.toLowerCase()
-          .normalize("NFD").replace(/[\u0300-\u036f]/g, "");
-        
-        // 🚀 CORREÇÃO DO NÚMERO (Resolve as turmas Lab. 2 e PPC 2017)
-        const regexPeriodo = /(\d+)[^\d]*(?:ano|periodo)/;
-        const numeroJson = textoJson.match(regexPeriodo)?.[1] || textoJson.match(/\d+/)?.[0];
-        const numeroDb = textoDb.match(regexPeriodo)?.[1] || textoDb.match(/\d+/)?.[0];
-        
-        const temA = /\ba\b/.test(textoJson);
-        const temB = /\bb\b/.test(textoJson);
-        const dbTemA = /\ba\b/.test(textoDb);
-        const dbTemB = /\bb\b/.test(textoDb);
-
-        let letraBate = true;
-        if (temA && !dbTemA) letraBate = false;
-        if (temB && !dbTemB) letraBate = false;
-
-        let cursoBate = false;
-        if (textoJson.includes('agropec') && textoDb.includes('agropecuaria')) cursoBate = true;
-        if (textoJson.includes('agroind') && textoDb.includes('agroindustria')) cursoBate = true;
-        if (textoJson.includes('sist') && textoDb.includes('sistema')) cursoBate = true;
-        if (textoJson.includes('info') && !textoJson.includes('sist') && textoDb.includes('informatica')) cursoBate = true;
-        if (textoJson.includes('med. vet') && textoDb.includes('veterinaria')) cursoBate = true;
-        if (textoJson.includes('alim') && textoDb.includes('alimento')) cursoBate = true;
-        if (textoJson.includes('flor') && textoDb.includes('florestal')) cursoBate = true;
-        if (textoJson.includes('biol') && textoDb.includes('biologica')) cursoBate = true;
-        if (textoJson.includes('fisic') && textoDb.includes('fisica')) cursoBate = true;
-        if (textoJson.includes('matema') && textoDb.includes('matematica')) cursoBate = true;
-        if (textoJson.includes('quim') && textoDb.includes('quimica')) cursoBate = true;
-        if (textoJson.includes('pedag') && textoDb.includes('pedagogia')) cursoBate = true;
-        if (textoJson.includes('meio amb') && textoDb.includes('meio ambiente')) cursoBate = true;
-
-        if (numeroJson === numeroDb && letraBate && cursoBate) {
-            turmaId = turmaDb.id;
-            break;
-        }
-      }
-
-      if (professorId && turmaId) {
-        disciplinasParaInserir.push({
-          nome: nomeDisciplina,
-          cargaHoraria: 4, 
-          professorId: professorId,
-          turmaId: turmaId
-        });
-      } else {
-        logErros.push(`⚠️ Falha ao vincular: Prof '${alocacao.professor}' (Achou Prof: ${!!professorId}) | Turma '${alocacao.turma.replace(/\n/g, ' ')}' (Achou Turma: ${!!turmaId})`);
-      }
+    if (!bancoNormalizado.has(chaveEsperada)) {
+      faltantes.push(item);
     }
   }
 
-  if (disciplinasParaInserir.length > 0) {
-    await prisma.disciplina.createMany({
-      data: disciplinasParaInserir,
-      skipDuplicates: true
+  // 6. Relatório Final
+  if (faltantes.length === 0) {
+    console.log("✅ Tudo perfeito! O banco está idêntico ao Seed.");
+  } else {
+    console.log("🚨 ITENS QUE NÃO FORAM SALVOS NO BANCO:");
+    faltantes.forEach(f => {
+      console.log(`❌ Falta -> Disciplina: "${f.disciplina}" | Prof: "${f.professor}" | Turma: "${f.turma}"`);
     });
-    console.log(`\n✅ SUCESSO! ${disciplinasParaInserir.length} disciplinas foram salvas no banco.`);
+    console.log(`\nTotal que ficou de fora: ${faltantes.length}`);
   }
-
-  if (logErros.length > 0) {
-    console.log(`\n⚠️ ${logErros.length} vínculos falharam por nomes fora do padrão:`);
-    logErros.forEach(erro => console.log(erro));
-  }
-
-  console.log(`\n🏁 Fim do processamento!`);
 }
 
-// GATILHO FINAL
-main()
-  .catch((e) => {
-    console.error("❌ Erro fatal:", e);
-    process.exit(1);
-  })
-  .finally(async () => {
-    await prisma.$disconnect();
-  });
+verificarFaltantes()
+  .catch(e => console.error("Erro no script:", e))
+  .finally(async () => await prisma.$disconnect());

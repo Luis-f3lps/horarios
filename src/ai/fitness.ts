@@ -48,7 +48,7 @@ export function calcularFitness(grade: Grade, professores: any[], turmas: any[])
     cargaHorariaProf.set(aula.professorId, cargaAtual);
     if (cargaAtual > 8) nota -= 50000;
 
-    // --- 4. AULAS GEMINADAS (Agora com 12 horários) ---
+    // --- 4. AULAS GEMINADAS ---
     let turnoPar = '';
     if (aula.turno === 'M1') turnoPar = 'M2';
     else if (aula.turno === 'M2') turnoPar = 'M1';
@@ -75,7 +75,7 @@ export function calcularFitness(grade: Grade, professores: any[], turmas: any[])
 
     // --- 5. CONCENTRAÇÃO DE TURNO (M, T ou N) ---
     const chaveProfDia = `${aula.professorId}-${aula.dia}`;
-    const turnoAtual = aula.turno.charAt(0); // Pega apenas a primeira letra (M, T ou N)
+    const turnoAtual = aula.turno.charAt(0); 
     
     const turnoAnterior = aulasPorProfDia.get(chaveProfDia);
     if (turnoAnterior && turnoAnterior !== turnoAtual) {
@@ -83,15 +83,31 @@ export function calcularFitness(grade: Grade, professores: any[], turmas: any[])
     }
     aulasPorProfDia.set(chaveProfDia, turnoAtual);
 
-    // --- 6. BLOQUEIO DE TURNO POR CURSO ---
+    // --- 6. BLOQUEIO DE TURNO POR CURSO E REGRAS DE CONFORTO ---
     const turma = turmas.find(t => t.id === aula.turmaId);
     if (turma && turma.nome) {
       const nomeTurma = turma.nome.toLowerCase();
-      const ehTecnico = nomeTurma.includes('técnico') || nomeTurma.includes('tecnico');
-      const ehSistemas = nomeTurma.includes('sistemas de informação') || nomeTurma.includes('sistemas de informacao');
+      
+      // Mapeamento dos cursos pelas palavras-chave do IFNMG
+      const ehTecnico = nomeTurma.includes('técnico') || nomeTurma.includes('tecnico') || nomeTurma.includes('ano');
+      const ehSistemas = nomeTurma.includes('sist. de informação') || nomeTurma.includes('sistemas');
+      const ehLicenciatura = nomeTurma.includes('lic.') || nomeTurma.includes('licenciatura') || nomeTurma.includes('pedagogia');
+      const ehBacharelado = nomeTurma.includes('eng.') || nomeTurma.includes('engenharia') || nomeTurma.includes('veterinária') || nomeTurma.includes('vet') || ehSistemas;
 
+      // 🔴 REGRAS FATAIS (-100.000)
       if (ehTecnico && aula.turno.startsWith('N')) nota -= 100000;
-      if (ehSistemas && aula.turno.startsWith('M')) nota -= 100000;
+      if (ehLicenciatura && !aula.turno.startsWith('N')) nota -= 100000; // Só pode à noite
+      if (ehBacharelado && aula.turno.startsWith('M')) nota -= 100000; // Só pode tarde e noite
+
+      // 🟡 REGRAS MÉDIAS (-5.000): Folga dos técnicos na Quarta e Sexta à tarde
+      if (ehTecnico && aula.turno.startsWith('T') && (aula.dia === 'quarta' || aula.dia === 'sexta')) {
+        nota -= 5000; 
+      }
+
+      // 🟢 REGRAS DE CONFORTO (-500): Sistemas não gosta de aula depois das 21:00 (N3 e N4)
+      if (ehSistemas && (aula.turno === 'N3' || aula.turno === 'N4')) {
+        nota -= 500;
+      }
     }
   }
 
@@ -178,17 +194,35 @@ export function gerarRelatorioGrade(grade: Grade, professores: any[], turmas: an
     const turma = turmas.find(t => t.id === aula.turmaId);
     if (turma && turma.nome) {
       const nomeTurma = turma.nome.toLowerCase();
-      const ehTecnico = nomeTurma.includes('técnico') || nomeTurma.includes('tecnico');
-      const ehSistemas = nomeTurma.includes('sistemas de informação') || nomeTurma.includes('sistemas de informacao');
+      
+      const ehTecnico = nomeTurma.includes('técnico') || nomeTurma.includes('tecnico') || nomeTurma.includes('ano');
+      const ehSistemas = nomeTurma.includes('sist. de informação') || nomeTurma.includes('sistemas');
+      const ehLicenciatura = nomeTurma.includes('lic.') || nomeTurma.includes('licenciatura') || nomeTurma.includes('pedagogia');
+      const ehBacharelado = nomeTurma.includes('eng.') || nomeTurma.includes('engenharia') || nomeTurma.includes('veterinária') || nomeTurma.includes('vet') || ehSistemas;
 
       if (ehTecnico && aula.turno.startsWith('N')) {
         nota -= 100000;
         logs.push(`🚨 FATAL: Turma Técnica (${turma.nome}) alocada à noite (${aula.dia} ${aula.turno}).`);
       }
-
-      if (ehSistemas && aula.turno.startsWith('M')) {
+      
+      if (ehLicenciatura && !aula.turno.startsWith('N')) {
         nota -= 100000;
-        logs.push(`🚨 FATAL: Sistemas de Informação (${turma.nome}) alocado de manhã (${aula.dia} ${aula.turno}).`);
+        logs.push(`🚨 FATAL: Turma de Licenciatura (${turma.nome}) alocada antes das 18h (${aula.dia} ${aula.turno}).`);
+      }
+      
+      if (ehBacharelado && aula.turno.startsWith('M')) {
+        nota -= 100000;
+        logs.push(`🚨 FATAL: Turma de Bacharelado (${turma.nome}) alocada de manhã (${aula.dia} ${aula.turno}).`);
+      }
+
+      if (ehTecnico && aula.turno.startsWith('T') && (aula.dia === 'quarta' || aula.dia === 'sexta')) {
+        nota -= 5000;
+        logs.push(`⚠️ REGRA MÉDIA: Turma Técnica (${turma.nome}) não folgou na ${aula.dia} à tarde.`);
+      }
+
+      if (ehSistemas && (aula.turno === 'N3' || aula.turno === 'N4')) {
+        nota -= 500;
+        logs.push(`ℹ️ CONFORTO: Sistemas de Informação (${turma.nome}) teve aula depois das 21h (${aula.dia} ${aula.turno}).`);
       }
     }
   }

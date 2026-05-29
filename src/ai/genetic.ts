@@ -1,6 +1,7 @@
 // src/ai/genetic.ts
 import { PrismaClient } from '@prisma/client';
 import { calcularFitness, Grade, Aula, gerarRelatorioGrade } from './fitness';
+import { mutarGrade } from './mutations'; // 👈 Importando do seu arquivo novo
 
 const prisma = new PrismaClient();
 
@@ -13,31 +14,22 @@ function randomInt(max: number) {
 
 function gerarGradeAleatoria(disciplinas: any[]): Grade {
   const aulas: Aula[] = [];
+  
   for (const disc of disciplinas) {
-    aulas.push({
-      disciplinaId: disc.id,
-      professorId: disc.professorId,
-      turmaId: disc.turmaId,
-      dia: DIAS[randomInt(DIAS.length)],
-      turno: TURNOS[randomInt(TURNOS.length)]
-    });
+    const totalAulasNaSemana = disc.cargaHoraria || 4; 
+    
+    for (let i = 0; i < totalAulasNaSemana; i++) {
+      aulas.push({
+        disciplinaId: disc.id,
+        professorId: disc.professorId,
+        turmaId: disc.turmaId,
+        dia: DIAS[randomInt(DIAS.length)],
+        turno: TURNOS[randomInt(TURNOS.length)]
+      });
+    }
   }
+  
   return { aulas };
-}
-
-function mutarGrade(gradeOriginal: Grade): Grade {
-  const novaGrade = JSON.parse(JSON.stringify(gradeOriginal)) as Grade;
-  
-  // Taxa de Mutação: agressiva o suficiente para gerar variações na base dos 80%
-  const qtdMutacoes = randomInt(10) + 2; 
-  
-  for (let i = 0; i < qtdMutacoes; i++) {
-    const indiceAleatorio = randomInt(novaGrade.aulas.length);
-    novaGrade.aulas[indiceAleatorio].dia = DIAS[randomInt(DIAS.length)];
-    novaGrade.aulas[indiceAleatorio].turno = TURNOS[randomInt(TURNOS.length)];
-  }
-
-  return novaGrade;
 }
 
 export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total: number, nota: number) => void) {
@@ -45,11 +37,11 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
   const professores = await prisma.professor.findMany();
   const disciplinas = await prisma.disciplina.findMany();
   
-  // NOVA LINHA: Puxando as turmas para aplicar as regras de bloqueio de turno
+  // Puxando as turmas para aplicar as regras de bloqueio de turno
   const turmas = await prisma.turma.findMany(); 
 
   const TAMANHO_POPULACAO = 200;
-  const NUM_GERACOES = 5000; 
+  const NUM_GERACOES = 10000; 
   const NUM_IMIGRANTES = 5; 
 
   let populacao: { grade: Grade, nota: number }[] = [];
@@ -82,17 +74,16 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
       // Sorteia um "pai" APENAS de dentro do grupo seleto dos 20% melhores
       const pai = populacao[randomInt(VINTE_PORCENTO)].grade; 
       
-      // Gera o filho aplicando mutação no pai da elite
+      // Gera o filho aplicando mutação no pai da elite (usando a função importada)
       const filho = mutarGrade(pai); 
       
-      // Avalia a nota do filho e coloca na nova população (Passando 'turmas')
+      // Avalia a nota do filho e coloca na nova população
       novaPopulacao.push({ grade: filho, nota: calcularFitness(filho, professores, turmas) });
     }
 
     // 3. IMIGRANTES: Substitui os últimos da lista (os piores) por grades totalmente novas
     for(let i = 0; i < NUM_IMIGRANTES; i++) {
         const gradeNova = gerarGradeAleatoria(disciplinas);
-        // Passando 'turmas' aqui também
         novaPopulacao[novaPopulacao.length - 1 - i] = { grade: gradeNova, nota: calcularFitness(gradeNova, professores, turmas) };
     }
 
@@ -107,7 +98,7 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
   populacao.sort((a, b) => b.nota - a.nota);
   const melhorGrade = populacao[0].grade;
 
-  // Roda o raio-X apenas no campeão (Passando 'turmas' para o relatório)
+  // Roda o raio-X apenas no campeão
   const relatorio = gerarRelatorioGrade(melhorGrade, professores, turmas);
 
   console.log(`✅ Evolução concluída! Nota final: ${relatorio.nota}`);
