@@ -5,7 +5,7 @@ export interface Aula {
   turmaId: number;
   disciplinaId: number;
   dia: 'segunda' | 'terca' | 'quarta' | 'quinta' | 'sexta';
-  turno: string; 
+  turno: string;
 }
 
 export interface Grade {
@@ -16,8 +16,9 @@ export interface Grade {
 // 1. FUNÇÃO DE CÁLCULO (Usada milhares de vezes durante a evolução)
 // ============================================================================
 export function calcularFitness(grade: Grade, professores: any[], turmas: any[]): number {
-  let nota = 10000; 
-  
+  let nota = 10000;
+  const mapaProfs = new Map(professores.map(p => [p.id, p]));
+  const mapaTurmas = new Map(turmas.map(t => [t.id, t]));
   const ocupacaoProfessores = new Set<string>();
   const ocupacaoTurmas = new Set<string>();
   const cargaHorariaProf = new Map<number, number>();
@@ -35,11 +36,11 @@ export function calcularFitness(grade: Grade, professores: any[], turmas: any[])
     ocupacaoTurmas.add(chaveTurma);
 
     // --- 2. DISPONIBILIDADE DO PROFESSOR ---
-    const professor = professores.find((p) => p.id === aula.professorId);
+    const professor = mapaProfs.get(aula.professorId);
     if (professor && professor.diasDisponiveis) {
       const turnosLivresNesseDia = professor.diasDisponiveis[aula.dia] || [];
       if (!turnosLivresNesseDia.includes(aula.turno)) {
-        nota -= 50000; 
+        nota -= 50000;
       }
     }
 
@@ -62,32 +63,31 @@ export function calcularFitness(grade: Grade, professores: any[], turmas: any[])
     else if (aula.turno === 'N2') turnoPar = 'N1';
     else if (aula.turno === 'N3') turnoPar = 'N4';
     else if (aula.turno === 'N4') turnoPar = 'N3';
-    
+
     if (turnoPar) {
-      const temPar = grade.aulas.find(a => 
-        a.professorId === aula.professorId && 
-        a.turmaId === aula.turmaId && 
-        a.dia === aula.dia && 
+      const temPar = grade.aulas.find(a =>
+        a.professorId === aula.professorId &&
+        a.turmaId === aula.turmaId &&
+        a.dia === aula.dia &&
         a.turno === turnoPar
       );
-      if (!temPar) nota -= 200; 
+      if (!temPar) nota -= 200;
     }
 
     // --- 5. CONCENTRAÇÃO DE TURNO (M, T ou N) ---
     const chaveProfDia = `${aula.professorId}-${aula.dia}`;
-    const turnoAtual = aula.turno.charAt(0); 
-    
+    const turnoAtual = aula.turno.charAt(0);
+
     const turnoAnterior = aulasPorProfDia.get(chaveProfDia);
     if (turnoAnterior && turnoAnterior !== turnoAtual) {
-      nota -= 1000; 
+      nota -= 1000;
     }
     aulasPorProfDia.set(chaveProfDia, turnoAtual);
 
     // --- 6. BLOQUEIO DE TURNO POR CURSO E REGRAS DE CONFORTO ---
-    const turma = turmas.find(t => t.id === aula.turmaId);
-    if (turma && turma.nome) {
+    const turma = mapaTurmas.get(aula.turmaId); if (turma && turma.nome) {
       const nomeTurma = turma.nome.toLowerCase();
-      
+
       // Mapeamento dos cursos pelas palavras-chave do IFNMG
       const ehTecnico = nomeTurma.includes('técnico') || nomeTurma.includes('tecnico') || nomeTurma.includes('ano');
       const ehSistemas = nomeTurma.includes('sist. de informação') || nomeTurma.includes('sistemas');
@@ -101,7 +101,7 @@ export function calcularFitness(grade: Grade, professores: any[], turmas: any[])
 
       // 🟡 REGRAS MÉDIAS (-5.000): Folga dos técnicos na Quarta e Sexta à tarde
       if (ehTecnico && aula.turno.startsWith('T') && (aula.dia === 'quarta' || aula.dia === 'sexta')) {
-        nota -= 5000; 
+        nota -= 5000;
       }
 
       // 🟢 REGRAS DE CONFORTO (-500): Sistemas não gosta de aula depois das 21:00 (N3 e N4)
@@ -118,9 +118,9 @@ export function calcularFitness(grade: Grade, professores: any[], turmas: any[])
 // 2. FUNÇÃO DE RELATÓRIO (Roda apenas uma vez no campeão para gerar os textos)
 // ============================================================================
 export function gerarRelatorioGrade(grade: Grade, professores: any[], turmas: any[]): { nota: number, logs: string[] } {
-  let nota = 10000; 
+  let nota = 10000;
   const logs: string[] = [];
-  
+
   const ocupacaoProfessores = new Set<string>();
   const ocupacaoTurmas = new Set<string>();
   const cargaHorariaProf = new Map<number, number>();
@@ -134,7 +134,7 @@ export function gerarRelatorioGrade(grade: Grade, professores: any[], turmas: an
       nota -= 100000;
       logs.push(`🚨 FATAL: Prof ${aula.professorId} está em duas salas na ${aula.dia} (${aula.turno}).`);
     }
-    
+
     if (ocupacaoTurmas.has(chaveTurma)) {
       nota -= 100000;
       logs.push(`🚨 FATAL: Turma ${aula.turmaId} tem duas aulas diferentes na ${aula.dia} (${aula.turno}).`);
@@ -147,7 +147,7 @@ export function gerarRelatorioGrade(grade: Grade, professores: any[], turmas: an
     if (professor && professor.diasDisponiveis) {
       const turnosLivresNesseDia = professor.diasDisponiveis[aula.dia] || [];
       if (!turnosLivresNesseDia.includes(aula.turno)) {
-        nota -= 50000; 
+        nota -= 50000;
         logs.push(`⚠️ DISPONIBILIDADE: Prof ${aula.professorId} não pode dar aula na ${aula.dia} (${aula.turno}).`);
       }
     }
@@ -182,11 +182,11 @@ export function gerarRelatorioGrade(grade: Grade, professores: any[], turmas: an
     }
 
     const chaveProfDia = `${aula.professorId}-${aula.dia}`;
-    const turnoAtual = aula.turno.charAt(0); 
+    const turnoAtual = aula.turno.charAt(0);
     const turnoAnterior = aulasPorProfDia.get(chaveProfDia);
-    
+
     if (turnoAnterior && turnoAnterior !== turnoAtual) {
-      nota -= 1000; 
+      nota -= 1000;
       logs.push(`ℹ️ CONFORTO: Prof ${aula.professorId} está dando aula em mais de um turno (M/T/N) na ${aula.dia}.`);
     }
     aulasPorProfDia.set(chaveProfDia, turnoAtual);
@@ -194,7 +194,7 @@ export function gerarRelatorioGrade(grade: Grade, professores: any[], turmas: an
     const turma = turmas.find(t => t.id === aula.turmaId);
     if (turma && turma.nome) {
       const nomeTurma = turma.nome.toLowerCase();
-      
+
       const ehTecnico = nomeTurma.includes('técnico') || nomeTurma.includes('tecnico') || nomeTurma.includes('ano');
       const ehSistemas = nomeTurma.includes('sist. de informação') || nomeTurma.includes('sistemas');
       const ehLicenciatura = nomeTurma.includes('lic.') || nomeTurma.includes('licenciatura') || nomeTurma.includes('pedagogia');
@@ -204,12 +204,12 @@ export function gerarRelatorioGrade(grade: Grade, professores: any[], turmas: an
         nota -= 100000;
         logs.push(`🚨 FATAL: Turma Técnica (${turma.nome}) alocada à noite (${aula.dia} ${aula.turno}).`);
       }
-      
+
       if (ehLicenciatura && !aula.turno.startsWith('N')) {
         nota -= 100000;
         logs.push(`🚨 FATAL: Turma de Licenciatura (${turma.nome}) alocada antes das 18h (${aula.dia} ${aula.turno}).`);
       }
-      
+
       if (ehBacharelado && aula.turno.startsWith('M')) {
         nota -= 100000;
         logs.push(`🚨 FATAL: Turma de Bacharelado (${turma.nome}) alocada de manhã (${aula.dia} ${aula.turno}).`);

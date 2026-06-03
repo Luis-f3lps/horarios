@@ -11,8 +11,9 @@ function randomInt(max: number) {
 }
 
 export function mutarGrade(gradeOriginal: Grade): Grade {
-  const novaGrade = JSON.parse(JSON.stringify(gradeOriginal)) as Grade;
-  
+const novaGrade: Grade = {
+  aulas: gradeOriginal.aulas.map(aula => ({ ...aula }))
+};  
   // Taxa de Mutação Agressiva (Para alimentar os 80% do Exército de Clones)
   const qtdMutacoes = randomInt(10) + 2; 
   
