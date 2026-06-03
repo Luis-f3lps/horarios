@@ -1,7 +1,7 @@
 // src/ai/genetic.ts
 import { PrismaClient } from '@prisma/client';
 import { calcularFitness, Grade, Aula, gerarRelatorioGrade } from './fitness';
-import { mutarGrade } from './mutations'; // 👈 Importando do seu arquivo novo
+import { mutarGrade, cruzarGrades } from './mutations'; // 👉 Importamos as duas funções
 
 const prisma = new PrismaClient();
 
@@ -36,55 +36,52 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
   console.log("🚀 Puxando dados do banco...");
   const professores = await prisma.professor.findMany();
   const disciplinas = await prisma.disciplina.findMany();
-  
-  // Puxando as turmas para aplicar as regras de bloqueio de turno
   const turmas = await prisma.turma.findMany(); 
 
+  // 👉 CRIA OS MAPAS APENAS UMA VEZ AQUI
+  const mapaProfs = new Map(professores.map(p => [p.id, p]));
+  const mapaTurmas = new Map(turmas.map(t => [t.id, t]));
+
   const TAMANHO_POPULACAO = 200;
-  const NUM_GERACOES = 10000; 
+  const NUM_GERACOES = 5000; 
   const NUM_IMIGRANTES = 5; 
 
   let populacao: { grade: Grade, nota: number }[] = [];
 
-  // Geração Zero
   for (let i = 0; i < TAMANHO_POPULACAO; i++) {
     const grade = gerarGradeAleatoria(disciplinas);
-    // Passando 'turmas' para o calcularFitness
-    populacao.push({ grade, nota: calcularFitness(grade, professores, turmas) });
+    populacao.push({ grade, nota: calcularFitness(grade, mapaProfs, mapaTurmas) }); // Passa o mapa!
   }
 
-  console.log("🧬 Iniciando a Evolução Genética (Estratégia 20/80)...");
+  console.log("🧬 Iniciando a Evolução Genética Completa (Crossover + Mutação)...");
 
   for (let geracao = 0; geracao < NUM_GERACOES; geracao++) {
-    // Ordena do melhor para o pior
     populacao.sort((a, b) => b.nota - a.nota);
 
     if (onProgress && geracao % 20 === 0) {
       onProgress(geracao, NUM_GERACOES, populacao[0].nota);
     }
 
-    // 1. ELITISMO DE 20%: Calcula quantos indivíduos representam o topo
     const VINTE_PORCENTO = Math.floor(TAMANHO_POPULACAO * 0.20); 
-
-    // Guarda os 20% melhores intactos (sem mutação)
     const novaPopulacao = populacao.slice(0, VINTE_PORCENTO);
 
-    // 2. MUTAÇÃO NOS 80%: Preenche o resto da população
     while (novaPopulacao.length < TAMANHO_POPULACAO) {
-      // Sorteia um "pai" APENAS de dentro do grupo seleto dos 20% melhores
-      const pai = populacao[randomInt(VINTE_PORCENTO)].grade; 
+      // 👉 SORTEIA DOIS PAIS DIFERENTES DA ELITE
+      const paiA = populacao[randomInt(VINTE_PORCENTO)].grade; 
+      const paiB = populacao[randomInt(VINTE_PORCENTO)].grade; 
       
-      // Gera o filho aplicando mutação no pai da elite (usando a função importada)
-      const filho = mutarGrade(pai); 
+      // 👉 1º Passo: Sexo Genético (Crossover)
+      let filho = cruzarGrades(paiA, paiB); 
       
-      // Avalia a nota do filho e coloca na nova população
-      novaPopulacao.push({ grade: filho, nota: calcularFitness(filho, professores, turmas) });
+      // 👉 2º Passo: Adiciona um defeitinho (Mutação) para gerar diversidade
+      filho = mutarGrade(filho); 
+      
+      novaPopulacao.push({ grade: filho, nota: calcularFitness(filho, mapaProfs, mapaTurmas) });
     }
 
-    // 3. IMIGRANTES: Substitui os últimos da lista (os piores) por grades totalmente novas
     for(let i = 0; i < NUM_IMIGRANTES; i++) {
         const gradeNova = gerarGradeAleatoria(disciplinas);
-        novaPopulacao[novaPopulacao.length - 1 - i] = { grade: gradeNova, nota: calcularFitness(gradeNova, professores, turmas) };
+        novaPopulacao[novaPopulacao.length - 1 - i] = { grade: gradeNova, nota: calcularFitness(gradeNova, mapaProfs, mapaTurmas) };
     }
 
     populacao = novaPopulacao;
@@ -94,16 +91,14 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
     }
   }
 
-  // Ordenação final para garantir que o campeão está no topo
   populacao.sort((a, b) => b.nota - a.nota);
   const melhorGrade = populacao[0].grade;
 
-  // Roda o raio-X apenas no campeão
-  const relatorio = gerarRelatorioGrade(melhorGrade, professores, turmas);
+  // Raio-X com o mapa também
+  const relatorio = gerarRelatorioGrade(melhorGrade, mapaProfs, mapaTurmas);
 
   console.log(`✅ Evolução concluída! Nota final: ${relatorio.nota}`);
   
-  // Retorna a melhor grade e os logs para a API
   return {
     grade: melhorGrade,
     nota: relatorio.nota,
