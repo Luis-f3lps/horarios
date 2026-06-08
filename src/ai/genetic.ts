@@ -1,12 +1,13 @@
 // src/ai/genetic.ts
 import { PrismaClient } from '@prisma/client';
 import { calcularFitness, Grade, Aula, gerarRelatorioGrade } from './fitness';
-import { mutarGrade, cruzarGrades } from './mutations'; // 👉 Importamos as duas funções
+import { mutarGrade, cruzarGrades } from './mutations'; 
 
 const prisma = new PrismaClient();
 
 const DIAS = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'] as const;
-const TURNOS = ['M1', 'M2', 'M3', 'M4', 'T1', 'T2', 'T3', 'T4', 'N1', 'N2', 'N3', 'N4'];
+// 👉 ADICIONADO OS TURNOS 5
+const TURNOS = ['M1', 'M2', 'M3', 'M4', 'M5', 'T1', 'T2', 'T3', 'T4', 'T5', 'N1', 'N2', 'N3', 'N4', 'N5'];
 
 function randomInt(max: number) {
   return Math.floor(Math.random() * max);
@@ -14,10 +15,8 @@ function randomInt(max: number) {
 
 function gerarGradeAleatoria(disciplinas: any[]): Grade {
   const aulas: Aula[] = [];
-  
   for (const disc of disciplinas) {
     const totalAulasNaSemana = disc.cargaHoraria || 4; 
-    
     for (let i = 0; i < totalAulasNaSemana; i++) {
       aulas.push({
         disciplinaId: disc.id,
@@ -28,7 +27,6 @@ function gerarGradeAleatoria(disciplinas: any[]): Grade {
       });
     }
   }
-  
   return { aulas };
 }
 
@@ -38,7 +36,6 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
   const disciplinas = await prisma.disciplina.findMany();
   const turmas = await prisma.turma.findMany(); 
 
-  // 👉 CRIA OS MAPAS APENAS UMA VEZ AQUI
   const mapaProfs = new Map(professores.map(p => [p.id, p]));
   const mapaTurmas = new Map(turmas.map(t => [t.id, t]));
 
@@ -50,7 +47,7 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
 
   for (let i = 0; i < TAMANHO_POPULACAO; i++) {
     const grade = gerarGradeAleatoria(disciplinas);
-    populacao.push({ grade, nota: calcularFitness(grade, mapaProfs, mapaTurmas) }); // Passa o mapa!
+    populacao.push({ grade, nota: calcularFitness(grade, mapaProfs, mapaTurmas) }); 
   }
 
   console.log("🧬 Iniciando a Evolução Genética Completa (Crossover + Mutação)...");
@@ -66,16 +63,10 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
     const novaPopulacao = populacao.slice(0, VINTE_PORCENTO);
 
     while (novaPopulacao.length < TAMANHO_POPULACAO) {
-      // 👉 SORTEIA DOIS PAIS DIFERENTES DA ELITE
       const paiA = populacao[randomInt(VINTE_PORCENTO)].grade; 
       const paiB = populacao[randomInt(VINTE_PORCENTO)].grade; 
-      
-      // 👉 1º Passo: Sexo Genético (Crossover)
       let filho = cruzarGrades(paiA, paiB); 
-      
-      // 👉 2º Passo: Adiciona um defeitinho (Mutação) para gerar diversidade
       filho = mutarGrade(filho); 
-      
       novaPopulacao.push({ grade: filho, nota: calcularFitness(filho, mapaProfs, mapaTurmas) });
     }
 
@@ -94,9 +85,7 @@ export async function rodarAlgoritmoGerador(onProgress?: (geracao: number, total
   populacao.sort((a, b) => b.nota - a.nota);
   const melhorGrade = populacao[0].grade;
 
-  // Raio-X com o mapa também
   const relatorio = gerarRelatorioGrade(melhorGrade, mapaProfs, mapaTurmas);
-
   console.log(`✅ Evolução concluída! Nota final: ${relatorio.nota}`);
   
   return {

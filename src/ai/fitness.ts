@@ -12,7 +12,6 @@ export interface Grade {
   aulas: Aula[];
 }
 
-// 👉 AGORA RECEBE OS MAPAS PRONTOS: mapaProfs e mapaTurmas
 export function calcularFitness(grade: Grade, mapaProfs: Map<number, any>, mapaTurmas: Map<number, any>): number {
   let nota = 10000;
   
@@ -44,32 +43,23 @@ export function calcularFitness(grade: Grade, mapaProfs: Map<number, any>, mapaT
     if (cargaAtual > 8) nota -= 50000;
 
     let turnoPar = '';
-    if (aula.turno === 'M1') turnoPar = 'M2';
-    else if (aula.turno === 'M2') turnoPar = 'M1';
-    else if (aula.turno === 'M3') turnoPar = 'M4';
-    else if (aula.turno === 'M4') turnoPar = 'M3';
-    else if (aula.turno === 'T1') turnoPar = 'T2';
-    else if (aula.turno === 'T2') turnoPar = 'T1';
-    else if (aula.turno === 'T3') turnoPar = 'T4';
-    else if (aula.turno === 'T4') turnoPar = 'T3';
-    else if (aula.turno === 'N1') turnoPar = 'N2';
-    else if (aula.turno === 'N2') turnoPar = 'N1';
-    else if (aula.turno === 'N3') turnoPar = 'N4';
-    else if (aula.turno === 'N4') turnoPar = 'N3';
+    if (aula.turno === 'M1') turnoPar = 'M2'; else if (aula.turno === 'M2') turnoPar = 'M1';
+    else if (aula.turno === 'M3') turnoPar = 'M4'; else if (aula.turno === 'M4') turnoPar = 'M3';
+    else if (aula.turno === 'T1') turnoPar = 'T2'; else if (aula.turno === 'T2') turnoPar = 'T1';
+    else if (aula.turno === 'T3') turnoPar = 'T4'; else if (aula.turno === 'T4') turnoPar = 'T3';
+    else if (aula.turno === 'N1') turnoPar = 'N2'; else if (aula.turno === 'N2') turnoPar = 'N1';
+    else if (aula.turno === 'N3') turnoPar = 'N4'; else if (aula.turno === 'N4') turnoPar = 'N3';
+    // M5, T5 e N5 ficam em branco pois não têm par obrigatório
 
     if (turnoPar) {
       const temPar = grade.aulas.find(a =>
-        a.professorId === aula.professorId &&
-        a.turmaId === aula.turmaId &&
-        a.dia === aula.dia &&
-        a.turno === turnoPar
+        a.professorId === aula.professorId && a.turmaId === aula.turmaId && a.dia === aula.dia && a.turno === turnoPar
       );
       if (!temPar) nota -= 200;
     }
 
     const chaveProfDia = `${aula.professorId}-${aula.dia}`;
     const turnoAtual = aula.turno.charAt(0);
-
     const turnoAnterior = aulasPorProfDia.get(chaveProfDia);
     if (turnoAnterior && turnoAnterior !== turnoAtual) {
       nota -= 1000;
@@ -80,29 +70,40 @@ export function calcularFitness(grade: Grade, mapaProfs: Map<number, any>, mapaT
     if (turma && turma.nome) {
       const nomeTurma = turma.nome.toLowerCase();
 
+      // 👉 IDENTIFICAÇÃO DOS CURSOS
       const ehTecnico = nomeTurma.includes('técnico') || nomeTurma.includes('tecnico') || nomeTurma.includes('ano');
-      const ehSistemas = nomeTurma.includes('sist. de informação') || nomeTurma.includes('sistemas');
+      const ehSistemas = nomeTurma.includes('sist. de informação') || nomeTurma.includes('sistemas') || nomeTurma.includes('bsi');
       const ehLicenciatura = nomeTurma.includes('lic.') || nomeTurma.includes('licenciatura') || nomeTurma.includes('pedagogia');
-      const ehBacharelado = nomeTurma.includes('eng.') || nomeTurma.includes('engenharia') || nomeTurma.includes('veterinária') || nomeTurma.includes('vet') || ehSistemas;
+      const ehSuperiorPadrao = !ehTecnico && !ehSistemas && !ehLicenciatura; // Engenharias, Veterinária, etc.
 
-      if (ehTecnico && aula.turno.startsWith('N')) nota -= 100000;
-      if (ehLicenciatura && !aula.turno.startsWith('N')) nota -= 100000; 
-      if (ehBacharelado && aula.turno.startsWith('M')) nota -= 100000; 
-
-      if (ehTecnico && aula.turno.startsWith('T') && (aula.dia === 'quarta' || aula.dia === 'sexta')) {
-        nota -= 5000;
+      // 🛑 REGRAS DE TURNO (M, T, N) E BLOQUEIOS
+      
+      if (ehTecnico) {
+        // Técnico: Proibido noite INTEIRA e o 5º horário da tarde (T5)
+        if (aula.turno.startsWith('N') || aula.turno === 'T5') nota -= 10000000;
+        // Técnico: Proibido QUALQUER horário à tarde na Quarta ou Sexta
+        if (aula.turno.startsWith('T') && (aula.dia === 'quarta' || aula.dia === 'sexta')) nota -= 10000000;
       }
 
-      if (ehSistemas && (aula.turno === 'N3' || aula.turno === 'N4')) {
-        nota -= 500;
+      if (ehLicenciatura) {
+        // Licenciatura: Só pode de noite. Se for M ou T, morre.
+        if (!aula.turno.startsWith('N')) nota -= 10000000;
+      }
+
+      if (ehSistemas) {
+        // BSI: Só tarde e noite. Se for de manhã, morre.
+        if (aula.turno.startsWith('M')) nota -= 10000000;
+      }
+
+      if (ehSuperiorPadrao) {
+        // Restante do Superior: Só manhã e tarde. Se for noite, morre.
+        if (aula.turno.startsWith('N')) nota -= 10000000;
       }
     }
   }
-
   return nota;
 }
 
-// 👉 TAMBÉM RECEBE OS MAPAS AQUI
 export function gerarRelatorioGrade(grade: Grade, mapaProfs: Map<number, any>, mapaTurmas: Map<number, any>): { nota: number, logs: string[] } {
   let nota = 10000;
   const logs: string[] = [];
@@ -146,7 +147,6 @@ export function gerarRelatorioGrade(grade: Grade, mapaProfs: Map<number, any>, m
     }
 
     let turnoPar = '';
-    // Lógica das geminadas simplificada aqui
     if (aula.turno === 'M1') turnoPar = 'M2'; else if (aula.turno === 'M2') turnoPar = 'M1';
     else if (aula.turno === 'M3') turnoPar = 'M4'; else if (aula.turno === 'M4') turnoPar = 'M3';
     else if (aula.turno === 'T1') turnoPar = 'T2'; else if (aula.turno === 'T2') turnoPar = 'T1';
@@ -177,33 +177,36 @@ export function gerarRelatorioGrade(grade: Grade, mapaProfs: Map<number, any>, m
       const nomeTurma = turma.nome.toLowerCase();
 
       const ehTecnico = nomeTurma.includes('técnico') || nomeTurma.includes('tecnico') || nomeTurma.includes('ano');
-      const ehSistemas = nomeTurma.includes('sist. de informação') || nomeTurma.includes('sistemas');
+      const ehSistemas = nomeTurma.includes('sist. de informação') || nomeTurma.includes('sistemas') || nomeTurma.includes('bsi');
       const ehLicenciatura = nomeTurma.includes('lic.') || nomeTurma.includes('licenciatura') || nomeTurma.includes('pedagogia');
-      const ehBacharelado = nomeTurma.includes('eng.') || nomeTurma.includes('engenharia') || nomeTurma.includes('veterinária') || nomeTurma.includes('vet') || ehSistemas;
+      const ehSuperiorPadrao = !ehTecnico && !ehSistemas && !ehLicenciatura;
 
-      if (ehTecnico && aula.turno.startsWith('N')) {
-        nota -= 1000000;
-        logs.push(`🚨 FATAL: Turma Técnica (${turma.nome}) alocada à noite (${aula.dia} ${aula.turno}).`);
+      if (ehTecnico) {
+        if (aula.turno.startsWith('N') || aula.turno === 'T5') {
+          nota -= 10000000;
+          logs.push(`🚨 FATAL: Turma Técnica (${turma.nome}) num horário proibido (${aula.dia} ${aula.turno}).`);
+        }
+        if (aula.turno.startsWith('T') && (aula.dia === 'quarta' || aula.dia === 'sexta')) {
+          nota -= 10000000;
+          logs.push(`🚨 FATAL: Turma Técnica (${turma.nome}) não folgou na ${aula.dia} à tarde (${aula.turno}).`);
+        }
       }
+
       if (ehLicenciatura && !aula.turno.startsWith('N')) {
-        nota -= 1000000;
-        logs.push(`🚨 FATAL: Turma de Licenciatura (${turma.nome}) alocada antes das 18h (${aula.dia} ${aula.turno}).`);
-      }
-      if (ehBacharelado && aula.turno.startsWith('M')) {
-        nota -= 1000000;
-        logs.push(`🚨 FATAL: Turma de Bacharelado (${turma.nome}) alocada de manhã (${aula.dia} ${aula.turno}).`);
+        nota -= 10000000;
+        logs.push(`🚨 FATAL: Licenciatura (${turma.nome}) fora do turno da noite (${aula.dia} ${aula.turno}).`);
       }
 
-      if (ehTecnico && aula.turno.startsWith('T') && (aula.dia === 'quarta' || aula.dia === 'sexta')) {
-        nota -= 1000000;
-        logs.push(`⚠️ REGRA MÉDIA: Turma Técnica (${turma.nome}) não folgou na ${aula.dia} à tarde.`);
+      if (ehSistemas && aula.turno.startsWith('M')) {
+        nota -= 10000000;
+        logs.push(`🚨 FATAL: Sistemas de Informação (${turma.nome}) alocado de manhã (${aula.dia} ${aula.turno}).`);
       }
-      if (ehSistemas && (aula.turno === 'N3' || aula.turno === 'N4')) {
-        nota -= 500;
-        logs.push(`ℹ️ CONFORTO: Sistemas de Informação (${turma.nome}) teve aula depois das 21h (${aula.dia} ${aula.turno}).`);
+
+      if (ehSuperiorPadrao && aula.turno.startsWith('N')) {
+        nota -= 10000000;
+        logs.push(`🚨 FATAL: Superior Padrão (${turma.nome}) alocado à noite (${aula.dia} ${aula.turno}).`);
       }
     }
   }
-
   return { nota, logs };
 }

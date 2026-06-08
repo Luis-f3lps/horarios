@@ -12,6 +12,11 @@
     table { width: 100%; border-collapse: collapse; background: white; margin-top: 20px; box-shadow: 0 1px 3px rgba(0,0,0,0.2); }
     th, td { border: 1px solid #ddd; padding: 12px; text-align: center; width: 16%; }
     th { background-color: #2980b9; color: white; }
+    
+    .coluna-horario { background-color: #ecf0f1; border-right: 2px solid #bdc3c7; }
+    .turno-sigla { font-size: 14px; font-weight: bold; color: #2c3e50; }
+    .turno-relogio { font-size: 12px; color: #7f8c8d; margin-top: 4px; }
+    
     .aula-card { background-color: #ecf0f1; margin: 5px; padding: 8px; border-radius: 4px; font-size: 12px; border-left: 4px solid #3498db; text-align: left; }
     .prof { font-weight: bold; color: #2c3e50; }
     
@@ -23,7 +28,7 @@
       border-left: 5px solid #ffeeba;
       margin-bottom: 20px;
       font-size: 13px;
-      display: none; /* Escondido por padrão */
+      display: none;
     }
     #relatorio-erros ul { margin: 0; padding-left: 20px; margin-top: 10px; }
   </style>
@@ -49,11 +54,18 @@
   </div>
 
   <div id="container-tabela"></div>
-
-  <script>
+<script>
     let dadosGlobais = []; 
-const turnos = ['M1', 'M2', 'M3', 'M4', 'T1', 'T2', 'T3', 'T4', 'N1', 'N2', 'N3', 'N4'];
+    // 👉 ADICIONADO OS TURNOS 5
+    const turnos = ['M1', 'M2', 'M3', 'M4', 'M5', 'T1', 'T2', 'T3', 'T4', 'T5', 'N1', 'N2', 'N3', 'N4', 'N5'];
     const dias = ['segunda', 'terca', 'quarta', 'quinta', 'sexta'];
+
+    // 👉 ADICIONADO NO RELÓGIO OS TURNOS 5
+    const mapaHorarios = {
+      'M1': '07:30 - 08:20', 'M2': '08:20 - 09:10', 'M3': '09:30 - 10:20', 'M4': '10:20 - 11:10', 'M5': '11:10 - 12:00',
+      'T1': '13:30 - 14:20', 'T2': '14:20 - 15:10', 'T3': '15:30 - 16:20', 'T4': '16:20 - 17:10', 'T5': '17:10 - 18:00',
+      'N1': '19:00 - 19:50', 'N2': '19:50 - 20:40', 'N3': '20:50 - 21:40', 'N4': '21:40 - 22:30', 'N5': '22:30 - 23:20'
+    };
 
     async function gerarHorarios() {
       document.getElementById('status').innerText = 'O processador Xeon está pensando... (Aguarde)';
@@ -65,24 +77,28 @@ const turnos = ['M1', 'M2', 'M3', 'M4', 'T1', 'T2', 'T3', 'T4', 'N1', 'N2', 'N3'
         dadosGlobais = json.aulas; 
         document.getElementById('status').innerText = `✅ Horário gerado! (Nota: ${json.nota})`;
         
-        // --- LÓGICA DO RELATÓRIO DE ERROS ---
         const caixaRelatorio = document.getElementById('relatorio-erros');
         const listaLogs = document.getElementById('lista-logs');
-        listaLogs.innerHTML = ''; // Limpa logs antigos
+        listaLogs.innerHTML = ''; 
         
         if (json.logs && json.logs.length > 0) {
           caixaRelatorio.style.display = 'block';
-          // Mostra até 20 erros para não travar a tela
-          json.logs.slice(0, 20).forEach(log => {
+
+          const logsOrdenados = json.logs.sort((a, b) => {
+            const pesoA = a.startsWith('🚨') ? 3 : a.startsWith('⚠️') ? 2 : a.startsWith('ℹ️') ? 1 : 0;
+            const pesoB = b.startsWith('🚨') ? 3 : b.startsWith('⚠️') ? 2 : b.startsWith('ℹ️') ? 1 : 0;
+            return pesoB - pesoA; 
+          });
+
+          logsOrdenados.slice(0, 20).forEach(log => {
             listaLogs.innerHTML += `<li>${log}</li>`;
           });
-          if (json.logs.length > 20) {
-            listaLogs.innerHTML += `<li><em>...e mais ${json.logs.length - 20} problemas menores detalhados no sistema.</em></li>`;
+          if (logsOrdenados.length > 20) {
+            listaLogs.innerHTML += `<li><em>...e mais ${logsOrdenados.length - 20} problemas menores detalhados no sistema.</em></li>`;
           }
         } else {
-          caixaRelatorio.style.display = 'none'; // Esconde se não houver erros
+          caixaRelatorio.style.display = 'none'; 
         }
-        // ------------------------------------
 
         popularDropdown();
         renderizarPorTurma(); 
@@ -97,13 +113,10 @@ const turnos = ['M1', 'M2', 'M3', 'M4', 'T1', 'T2', 'T3', 'T4', 'N1', 'N2', 'N3'
       select.innerHTML = '<option value="">Todas as Turmas</option>';
       
       if (!dadosGlobais) return;
-
       const turmasUnicas = [...new Set(dadosGlobais.map(a => a.turma))].sort();
-      
       turmasUnicas.forEach(turma => {
         const option = document.createElement('option');
-        option.value = turma;
-        option.text = turma;
+        option.value = turma; option.text = turma;
         select.appendChild(option);
       });
     }
@@ -114,21 +127,22 @@ const turnos = ['M1', 'M2', 'M3', 'M4', 'T1', 'T2', 'T3', 'T4', 'N1', 'N2', 'N3'
       container.innerHTML = '';
 
       if (!dadosGlobais) return;
-
       let aulasFiltradas = filtro ? dadosGlobais.filter(a => a.turma === filtro) : dadosGlobais;
       
       const grupos = aulasFiltradas.reduce((acc, aula) => {
         if (!acc[aula.turma]) acc[aula.turma] = [];
-        acc[aula.turma].push(aula);
-        return acc;
+        acc[aula.turma].push(aula); return acc;
       }, {});
 
       for (const [nomeTurma, aulas] of Object.entries(grupos)) {
         container.innerHTML += `<h3>Turma: ${nomeTurma}</h3>`;
-        let html = `<table><thead><tr><th>Turno</th><th>Segunda</th><th>Terça</th><th>Quarta</th><th>Quinta</th><th>Sexta</th></tr></thead><tbody>`;
+        let html = `<table><thead><tr><th>Horário</th><th>Segunda</th><th>Terça</th><th>Quarta</th><th>Quinta</th><th>Sexta</th></tr></thead><tbody>`;
         
         turnos.forEach(turno => {
-          html += `<tr><td><strong>${turno}</strong></td>`;
+          html += `<tr><td class="coluna-horario">
+                     <div class="turno-sigla">${turno}</div>
+                     <div class="turno-relogio">${mapaHorarios[turno]}</div>
+                   </td>`;
           dias.forEach(dia => {
             html += `<td>` + aulas.filter(a => a.dia === dia && a.turno === turno)
               .map(a => `<div class="aula-card"><div class="prof">${a.professor}</div><div>${a.disciplina}</div></div>`)
